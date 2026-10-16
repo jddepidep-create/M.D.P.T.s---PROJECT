@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CanSat Ground Station</title>
+<style>
+:root{--bg:#0a0e14;--pn:#111823;--ln:#222e40;--tx:#e4ebf5;--mu:#7b8aa3;--ac:#5ad1ff;--ok:#5be39a;--wa:#ffb84a;--er:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 "Segoe UI",system-ui,sans-serif;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(360px,1fr);grid-template-rows:auto minmax(0,1fr);height:100vh}
+header{grid-column:1/3;display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--ln);flex-wrap:wrap}
+h1{font-size:16px;margin:0 auto 0 0;font-weight:600}
+button,select{background:var(--pn);color:var(--tx);border:1px solid var(--ln);padding:7px 12px;border-radius:6px;cursor:pointer;font:inherit}
+button:hover:not(:disabled){border-color:var(--ac)}button:disabled{opacity:.4;cursor:default}
+button:focus-visible,select:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+button.on{border-color:var(--ac);color:var(--ac)}
+#st{padding:3px 10px;border-radius:99px;background:#1b2535;color:var(--mu)}
+#st.ok{color:var(--ok)}#st.wa{color:var(--wa)}#st.er{color:var(--er)}
+#view{position:relative;min-height:280px;touch-action:none;overflow:hidden}#view canvas{display:block}
+#hud{position:absolute;left:12px;top:12px;font:13px ui-monospace,Consolas,monospace;color:var(--mu);line-height:1.6;pointer-events:none}#hud b{color:var(--tx)}
+#phase{position:absolute;right:12px;top:12px;font:600 15px ui-monospace,Consolas,monospace;padding:4px 12px;border-radius:6px;border:1px solid var(--ln);background:#0a0e14cc}
+#log{position:absolute;left:12px;bottom:12px;font:12px ui-monospace,Consolas,monospace;color:var(--mu);max-height:30%;overflow:hidden;pointer-events:none}
+#log div b{color:var(--ac);font-weight:400}
+#side{overflow:auto;padding:12px;display:grid;gap:10px;align-content:start;border-left:1px solid var(--ln)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.c{background:var(--pn);border:1px solid var(--ln);border-radius:6px;padding:7px 10px}
+.c small{color:var(--mu);display:block;font-size:12px}
+.c span{font:600 19px ui-monospace,Consolas,monospace}.c i{font-style:normal;color:var(--mu);font-size:12px}
+.c.big{grid-column:span 3;display:flex;justify-content:space-between;align-items:baseline}
+.c.big span{font-size:26px}
+.ctl{display:flex;gap:8px;align-items:center;color:var(--mu)}
+canvas.ch{width:100%;height:120px;background:var(--pn);border:1px solid var(--ln);border-radius:6px}
+@media(max-width:800px){body{grid-template-columns:1fr;grid-template-rows:auto 42vh auto;height:auto}header{grid-column:1}#side{border-left:0}}
+</style></head><body>
+<header><h1>CanSat Ground Station</h1><span id="st">disconnected</span>
+<button id="bC">Connect USB</button><button id="bD">Demo flight</button><button id="bR">Replay CSV</button><button id="bZ" title="Zero attitude, altitude and maxima (Z)">Zero</button><button id="bP" title="Freeze charts (Space)">Pause</button><button id="bS" disabled>Download CSV</button>
+<input type="file" id="fR" accept=".csv,text/csv" hidden></header>
+<div id="view"><div id="hud"></div><div id="phase">PAD</div><div id="log"></div></div>
+<div id="side">
+ <div class="grid">
+  <div class="c big"><div><small>Altitude</small><span id="alt">0</span> <i>m</i></div><div><small>Vertical speed</small><span id="vs">0</span> <i>m/s</i></div></div>
+  <div class="c"><small>Max altitude</small><span id="mAlt">0</span> <i>m</i></div>
+  <div class="c"><small>Max speed</small><span id="mVs">0</span> <i>m/s</i></div>
+  <div class="c"><small>Max accel</small><span id="mG">0</span> <i>g</i></div>
+  <div class="c"><small>Flight time</small><span id="ft">0</span> <i>s</i></div>
+  <div class="c"><small>Time to apogee</small><span id="ta">–</span> <i>s</i></div>
+  <div class="c"><small>Avg descent</small><span id="ad">–</span> <i>m/s</i></div>
+  <div class="c"><small>Temperature</small><span id="tmp">0</span> <i>°C</i></div>
+  <div class="c"><small>Humidity</small><span id="hum">0</span> <i>%</i></div>
+  <div class="c"><small>Pressure</small><span id="prs">0</span> <i>hPa</i></div>
+  <div class="c"><small>Roll</small><span id="rl">0</span> <i>°</i></div>
+  <div class="c"><small>Pitch</small><span id="pt">0</span> <i>°</i></div>
+  <div class="c"><small>Yaw</small><span id="yw">0</span> <i>°</i></div>
+  <div class="c"><small>Accel |a|</small><span id="ag">0</span> <i>g</i></div>
+  <div class="c"><small>Spin rate</small><span id="sp">0</span> <i>°/s</i></div>
+  <div class="c"><small>Packets</small><span id="pk">0</span> <i id="hz"></i></div>
+ </div>
+ <div class="ctl">Chart window <select id="win"><option value="30">30 s</option><option value="120" selected>2 min</option><option value="0">Whole flight</option></select></div>
+ <canvas class="ch" id="c1"></canvas><canvas class="ch" id="c2"></canvas><canvas class="ch" id="c3"></canvas><canvas class="ch" id="c4"></canvas>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),D=Math.PI/180;
+// ---------- 3D scene ----------
+const view=$('view'),R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(devicePixelRatio);view.appendChild(R.domElement);
+const S=new THREE.Scene();S.background=new THREE.Color(0x0a0e14);
+const cam=new THREE.PerspectiveCamera(45,1,.1,100);
+const sun=new THREE.DirectionalLight(0xffffff,.8);sun.position.set(3,5,4);
+S.add(new THREE.HemisphereLight(0xffffff,0x222233,1),sun);
+S.add(new THREE.GridHelper(10,20,0x2c3a50,0x182233));S.add(new THREE.AxesHelper(2));
+const frame=new THREE.Group();frame.rotation.x=-Math.PI/2;frame.position.y=1.7;S.add(frame);   // sensor Z -> up, lifted so the model clears the grid
+const att=new THREE.Group();att.rotation.order='ZYX';frame.add(att);       // roll(X) pitch(Y) yaw(Z)
+const M=(c,m=.3,r=.45)=>new THREE.MeshStandardMaterial({color:c,metalness:m,roughness:r});
+const Rb=.35;
+function mesh(g,mat,z=0){g.rotateX(Math.PI/2);const o=new THREE.Mesh(g,mat);o.position.z=z;att.add(o);return o}
+mesh(new THREE.CylinderGeometry(Rb,Rb,2,48),M(0xeef1f5),0);                       // body tube
+mesh(new THREE.CylinderGeometry(Rb+.012,Rb+.012,.22,48),M(0x38bdf8),.55);          // upper band
+mesh(new THREE.CylinderGeometry(Rb+.012,Rb+.012,.12,48),M(0x1f2937),-.45);         // lower band
+// ogive nose cone (smooth lathe profile)
+{const L=.9,rho=(Rb*Rb+L*L)/(2*Rb),pts=[];
+ for(let i=0;i<=24;i++){const h=L*i/24;pts.push(new THREE.Vector2(Math.max(.001,Math.sqrt(rho*rho-h*h)+Rb-rho),h))}
+ mesh(new THREE.LatheGeometry(pts,48),M(0xef4444,.4,.35),1)}
+// swept fins; fin 0 is cyan so roll and spin are easy to read
+{const sh=new THREE.Shape();sh.moveTo(.3,-.15);sh.lineTo(.95,-.7);sh.lineTo(.95,-1.0);sh.lineTo(.3,-1.0);sh.closePath();
+ for(let i=0;i<4;i++){const g=new THREE.ExtrudeGeometry(sh,{depth:.04,bevelEnabled:false});g.translate(0,0,-.02);g.rotateX(Math.PI/2);
+  const f=new THREE.Mesh(g,M(i?0xef4444:0x38bdf8,.3,.5));f.rotation.z=i*Math.PI/2;att.add(f)}}
+mesh(new THREE.CylinderGeometry(.14,.21,.28,32),M(0x374151,.7,.35),-1.14);          // engine nozzle
+const stripe=new THREE.Mesh(new THREE.BoxGeometry(.02,.07,1.5),M(0x38bdf8));stripe.position.set(Rb+.005,0,0);att.add(stripe);  // roll reference stripe
+const flame=mesh(new THREE.ConeGeometry(.17,.9,24).translate(0,.45,0).rotateX(Math.PI),new THREE.MeshBasicMaterial({color:0xffa53a,transparent:true,opacity:.85}),-1.28);
+flame.geometry.rotateX(0);flame.visible=false;
+att.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,1.9),.7,0x5be39a,.2,.12));  // nose direction
+function resize(){const w=view.clientWidth,h=view.clientHeight;R.setSize(w,h);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+let drag=false,az=.6,el=.4,dist=7;
+const cv3=R.domElement;
+cv3.addEventListener('pointerdown',e=>{drag=true;cv3.setPointerCapture(e.pointerId)});
+cv3.addEventListener('pointerup',()=>drag=false);
+cv3.addEventListener('pointermove',e=>{if(drag){az-=e.movementX*.01;el=Math.max(-1.4,Math.min(1.4,el+e.movementY*.01))}});
+cv3.addEventListener('wheel',e=>{dist=Math.max(3,Math.min(15,dist+e.deltaY*.005));e.preventDefault()},{passive:false});
+cv3.addEventListener('dblclick',()=>{az=.6;el=.4;dist=7});
+(function loop(){cam.position.set(dist*Math.cos(el)*Math.sin(az),1.7+dist*Math.sin(el),dist*Math.cos(el)*Math.cos(az));cam.lookAt(0,1.7,0);flame.scale.set(1,1,.8+Math.random()*.5);R.render(S,cam);requestAnimationFrame(loop)})();
+
+// ---------- data ----------
+const H='ms,ax,ay,az,gx,gy,gz,roll,pitch,yaw,temp,hum,press,alt,vs'.split(',');
+const rows=[];let max,t0,rollO=0,pitchO=0,yawO=0,altO=0,last=null,phase,tLift,tApo,apoAlt,pk=0,pk1=0,lastRx=0,paused=false,connected=false;
+const PC={PAD:'var(--mu)',ASCENT:'var(--ok)',APOGEE:'var(--wa)',DESCENT:'var(--ac)',LANDED:'var(--tx)'};
+function resetFlight(){max={alt:0,vs:0,g:0};t0=null;phase='PAD';tLift=tApo=null;apoAlt=0;$('log').innerHTML='';setPhase('PAD',true);$('ta').textContent='–';$('ad').textContent='–';$('ft').textContent='0'}
+function log(ms,txt){const d=document.createElement('div');d.innerHTML=`<b>T+${((ms-(t0||ms))/1000).toFixed(1)}s</b> ${txt}`;$('log').appendChild(d);while($('log').children.length>5)$('log').firstChild.remove()}
+function note(l){const d=document.createElement('div');d.textContent=l.replace(/^#\s*/,'');$('log').appendChild(d);while($('log').children.length>5)$('log').firstChild.remove();
+  const m=l.match(/BMP280:(\d)\s+AHT20:(\d)\s+BMI160:(\d)/);
+  if(m){const miss=['BMP280','AHT20','BMI160'].filter((n,i)=>m[i+1]==='0');sensorWarn=miss.length?'missing '+miss.join(', '):''}}
+function setPhase(p,quiet){phase=p;const e=$('phase');e.textContent=p;e.style.color=PC[p];if(!quiet)log(last?last.ms:0,p)}
+function stepPhase(d,alt){ // state machine with hysteresis, so noise can't flip phases
+  const vs=d.vs;
+  if(phase==='PAD'&&vs>3&&alt>1){tLift=d.ms;setPhase('ASCENT')}
+  else if(phase==='ASCENT'&&vs<1){tApo=d.ms;apoAlt=max.alt;setPhase('APOGEE');$('ta').textContent=((tApo-tLift)/1000).toFixed(1)}
+  else if(phase==='APOGEE'&&vs<-2)setPhase('DESCENT');
+  else if(phase==='DESCENT'&&alt<2&&Math.abs(vs)<1){setPhase('LANDED');if(tApo)$('ad').textContent=(apoAlt/((d.ms-tApo)/1000)).toFixed(1)}
+  else if(phase==='LANDED'&&vs>3&&alt>1){tLift=d.ms;setPhase('ASCENT')}
+  if(tLift&&phase!=='LANDED'&&phase!=='PAD')$('ft').textContent=((d.ms-tLift)/1000).toFixed(1);
+}
+function ingest(v){
+  const d={};H.forEach((k,i)=>d[k]=v[i]);d.alt=v[13]-altO;last=d;rows.push(v);if(rows.length>40000)rows.shift();
+  pk++;pk1++;lastRx=performance.now();
+  if(t0===null){t0=d.ms}
+  const g=Math.hypot(d.ax,d.ay,d.az),spin=Math.hypot(d.gx,d.gy,d.gz);
+  max.alt=Math.max(max.alt,d.alt);max.vs=Math.max(max.vs,Math.abs(d.vs));max.g=Math.max(max.g,g);
+  stepPhase(d,d.alt);flame.visible=phase==='ASCENT'&&g>2.5;
+  const wr=a=>((a%360)+540)%360-180,r=d.roll-rollO,p=d.pitch-pitchO,y=d.yaw-yawO;
+  att.rotation.set(r*D,p*D,y*D);
+  $('alt').textContent=d.alt.toFixed(1);$('vs').textContent=d.vs.toFixed(1);
+  $('mAlt').textContent=max.alt.toFixed(1);$('mVs').textContent=max.vs.toFixed(1);$('mG').textContent=max.g.toFixed(1);
+  $('tmp').textContent=d.temp.toFixed(1);$('hum').textContent=d.hum.toFixed(0);$('prs').textContent=d.press.toFixed(1);
+  $('rl').textContent=r.toFixed(0);$('pt').textContent=p.toFixed(0);$('yw').textContent=wr(y).toFixed(0);
+  $('ag').textContent=g.toFixed(2);$('sp').textContent=spin.toFixed(0);$('pk').textContent=pk;
+  $('hud').innerHTML=`ALT <b>${d.alt.toFixed(1)} m</b><br>V/S <b>${d.vs.toFixed(1)} m/s</b><br>R/P/Y <b>${r.toFixed(0)}° ${p.toFixed(0)}° ${wr(y).toFixed(0)}°</b>`;
+  $('bS').disabled=false;
+}
+// ---------- charts ----------
+function chart(cv,series,title,unit){
+  const k=devicePixelRatio,w=cv.width=cv.clientWidth*k,h=cv.height=cv.clientHeight*k,x=cv.getContext('2d');
+  x.clearRect(0,0,w,h);x.font=`${11*k}px sans-serif`;x.fillStyle='#7b8aa3';x.fillText(title+' ('+unit+')',8*k,15*k);
+  if(rows.length<2)return;
+  const win=+$('win').value*1000,end=rows[rows.length-1][0];let i0=0;
+  if(win){i0=rows.length-1;while(i0>0&&end-rows[i0][0]<win)i0--}else i0=0;
+  const sl=rows.slice(i0),T0=sl[0][0],T1=Math.max(end,T0+1),L=36*k,B=h-16*k,Tp=24*k;
+  let lo=1e9,hi=-1e9;series.forEach(s=>sl.forEach(r=>{const v=r[s.i];lo=Math.min(lo,v);hi=Math.max(hi,v)}));
+  if(hi-lo<1e-6){hi+=1;lo-=1}const pad=(hi-lo)*.08;lo-=pad;hi+=pad;
+  x.strokeStyle='#222e40';x.lineWidth=k;x.fillStyle='#7b8aa3';
+  for(let n=0;n<=3;n++){const y=Tp+(B-Tp)*n/3;x.beginPath();x.moveTo(L,y);x.lineTo(w,y);x.stroke();x.fillText((hi-(hi-lo)*n/3).toFixed(Math.abs(hi)<10?1:0),2*k,y+4*k)}
+  x.fillText(((T0-rows[0][0])/1000).toFixed(0)+'s',L,h-3*k);x.fillText(((T1-rows[0][0])/1000).toFixed(0)+'s',w-30*k,h-3*k);
+  series.forEach((s,si)=>{x.strokeStyle=s.c;x.lineWidth=1.8*k;x.beginPath();
+   const step=Math.max(1,Math.floor(sl.length/(w/2)));
+   for(let j=0;j<sl.length;j+=step){const r=sl[j],X=L+(r[0]-T0)/(T1-T0)*(w-L),Y=B-(r[s.i]-lo)/(hi-lo)*(B-Tp);j?x.lineTo(X,Y):x.moveTo(X,Y)}x.stroke();
+   const c=sl[sl.length-1][s.i];x.fillStyle=s.c;x.fillText((s.n?s.n+' ':'')+c.toFixed(1),w-90*k+si*0,15*k+si*13*k)});
+}
+setInterval(()=>{if(paused)return;
+ chart($('c1'),[{i:13,c:'#5ad1ff'}],'Altitude','m');
+ chart($('c2'),[{i:14,c:'#5be39a'}],'Vertical speed','m/s');
+ chart($('c3'),[{i:1,c:'#ff6b6b',n:'X'},{i:2,c:'#ffb84a',n:'Y'},{i:3,c:'#b794f6',n:'Z'}],'Acceleration','g');
+ chart($('c4'),[{i:10,c:'#ffb84a'}],'Temperature','°C')},200);
+setInterval(()=>{$('hz').textContent=pk1+' Hz';pk1=0;
+ if(connected){const zr=performance.now()<zeroUntil,lost=!zr&&performance.now()-lastRx>2000&&pk>0;
+  $('st').textContent=lost?'link lost':zr?'zeroing, keep still':'connected'+(sensorWarn?' · '+sensorWarn:'');$('st').className=lost?'er':(zr||sensorWarn)?'wa':'ok'}},1000);
+
+// ---------- sources ----------
+let port,writer,reader,demo=null,replay=null,zeroUntil=0,sensorWarn='';
+function status(t,c){$('st').textContent=t;$('st').className=c||''}
+function newRun(){resetFlight();rows.length=0;pk=0;rollO=pitchO=yawO=altO=0;sensorWarn=''}
+async function closePort(){connected=false;try{await reader?.cancel()}catch{}try{writer?.releaseLock()}catch{}try{await port?.close()}catch{}port=writer=reader=null;$('bC').textContent='Connect USB';$('bC').classList.remove('on')}
+function stopSim(){clearInterval(demo);clearInterval(replay);demo=replay=null;$('bD').classList.remove('on');$('bD').textContent='Demo flight'}
+$('bC').onclick=async()=>{
+  if(port){await closePort();return status('disconnected')}
+  if(!('serial' in navigator))return alert('Web Serial needs Chrome or Edge on desktop or Android. Open this file from disk or over HTTPS.');
+  try{stopSim();port=await navigator.serial.requestPort();await port.open({baudRate:115200});newRun();connected=true;lastRx=performance.now();
+   status('connected','ok');$('bC').textContent='Disconnect';$('bC').classList.add('on');
+   writer=port.writable.getWriter();reader=port.readable.pipeThrough(new TextDecoderStream()).getReader();let buf='';
+   for(;;){const{value,done}=await reader.read();if(done)break;buf+=value;let n;
+    while((n=buf.indexOf('\n'))>=0){const l=buf.slice(0,n).trim();buf=buf.slice(n+1);
+     if(l.startsWith('D,')){const v=l.slice(2).split(',').map(Number);if(v.length===15&&v.every(isFinite))ingest(v)}
+     else if(l.startsWith('#'))note(l)}}
+   await closePort();status('disconnected')
+  }catch(e){await closePort();status('error: '+e.message,'er')}};
+$('bZ').onclick=async()=>{
+  if(writer){rollO=pitchO=yawO=altO=0;zeroUntil=performance.now()+3000;   // the ESP32 zeroes itself (~1.6 s, board must be still)
+   try{await writer.write(new TextEncoder().encode('z'))}catch{}}
+  else if(last){rollO=last.roll;pitchO=last.pitch;yawO=last.yaw;altO+=last.alt}      // demo / replay: zero in the browser
+  max={alt:0,vs:0,g:0};tLift=tApo=null;setPhase('PAD',true)};
+$('bP').onclick=()=>{paused=!paused;$('bP').textContent=paused?'Resume':'Pause';$('bP').classList.toggle('on',paused)};
+$('bS').onclick=()=>{const b=new Blob([H.join(',')+'\n'+rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='cansat_'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+addEventListener('keydown',e=>{if(e.target.tagName==='SELECT')return;if(e.key==='z')$('bZ').click();if(e.key===' '){e.preventDefault();$('bP').click()}});
+
+// Replay a saved CSV at real speed
+$('bR').onclick=()=>$('fR').click();
+$('fR').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  const data=(await f.text()).split(/\r?\n/).map(l=>l.split(',').map(Number)).filter(v=>v.length===15&&v.every(isFinite));
+  e.target.value='';if(data.length<2)return status('CSV has no valid rows','er');
+  if(port)await closePort();stopSim();newRun();status('replay','wa');$('bD').textContent='Stop replay';$('bD').classList.add('on');
+  let i=0,clock=data[0][0];replay=setInterval(()=>{clock+=50;while(i<data.length&&data[i][0]<=clock)ingest(data[i++]);if(i>=data.length){stopSim();status('replay finished')}},50)};
+
+// Simulated flight
+$('bD').onclick=async()=>{if(demo||replay){stopSim();return status('stopped')}
+  if(port)await closePort();newRun();let t=0,yaw=0,alt=0;status('demo','wa');$('bD').textContent='Stop demo';$('bD').classList.add('on');
+  demo=setInterval(()=>{t+=.05;let vs,a=1,tilt=0;
+   if(t<2){vs=t*35;a=6;tilt=3}else if(t<9){vs=70-(t-2)*10;a=.3;tilt=10+(t-2)*10}else if(t<10){vs=-5;a=1.5;tilt=70}else{vs=-6;a=1;tilt=20}
+   alt=Math.max(0,alt+vs*.05);if(alt===0&&t>12){t=0;alt=0;yaw=0;resetFlight()}
+   yaw+=(t<9?120:25)*.05;const r=Math.sin(t*1.3)*tilt*.5,p=tilt*Math.cos(t*.7)*.5;
+   ingest([Math.round(t*1000),Math.random()*.1,Math.random()*.1,a,0,0,t<9?120:25,r,p,yaw%360,24+Math.random()*.2,60,1013-alt*.12,alt,vs])},50)};
+resetFlight();
+</script></body></html>
