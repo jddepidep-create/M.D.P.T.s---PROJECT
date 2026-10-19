@@ -16,7 +16,7 @@ A collection of basic CanSat breadboard prototypes and flight data analysis tool
 ### `cansat_simple.ino`
 Arduino firmware. Reads sensors, streams telemetry over USB at 20 Hz.
 
-### `cansat_dashboard.html`
+### `cansat_dashboard_v2.html`
 Web dashboard (Chrome). Connect USB to see live 3D rocket and graphs.
 
 ## Wiring
