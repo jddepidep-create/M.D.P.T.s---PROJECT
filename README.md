@@ -4,7 +4,7 @@ A repository documenting my collection of hobbyist satellites under the M. D. P.
 ## Breadboard Prototype Section:
 A collection of basic CanSat breadboard prototypes and flight data analysis tools. Includes beginner firmware for ESP32-based atmospheric probes with a variety of sensors (BMI160, BMP280+AHT20, etc.), real-time 3D visualization , These prototypes were built just for rapid iteration, and R&D, not for active deployment.
 
-## MDPTs Breadboard v1
+## MDPTs Breadboard v1.1
 - Minimal setup with BMP280 + AHT20, BMI160 modules
 - Initial working prototype
 - BMP280 + AHT20 + BMI160
